@@ -1,0 +1,31 @@
+上傳github前最後檢查資料夾架構 
+.ignore 到底要有哪些
+
+20260614 進度
+基本功能開發完成，建議代辦：
+我掃過專案後，發現目前主要還剩這幾件事沒完成：
+
+Phase 3 還沒真正做完
+
+booking_agent.py 現在已經能用 check_availability() 查可用時段，但 app.py 仍然只是通用 chat 介面，沒有把 booking 查詢結果做成更明確的「今天有沒有可預約」/「建議近三天」專用顯示。
+目前並未新增 test_booking.py 或專門的 booking end-to-end 測試。
+README/文件還沒同步
+
+README.md 仍然寫著「使用 AzureChatOpenAI」、「Phase 1 仍為 mock」等舊內容，與目前實際已改成 OpenAI Responses + booking 查詢不一致。
+architecture.mmd 仍然描述 booking agent 是 mock。
+環境檔與安全性
+
+專案裡目前有 .env，而不是只有 .env.example。這個 .env 內含 API key，應該只留在本機，若已被 Git 追蹤應立即移除並只保留 .gitignore 規則。
+.env.example 目前也存在，但程式已改為只讀 .env。你可以保留它當範本，或直接刪掉。
+代碼清理
+
+booking_agent.py 的主函式還叫 mock_response()，但現在它已經執行真實查詢了，這名稱會讓人誤解。
+booking_tools.py 仍是 placeholder，尚未實際使用。
+所以你的「基本功能」現在確實已經可以，真正還缺的是：
+
+UI/Streamlit 的 booking flow 完整化
+專門測試 booking path
+文件同步更新
+.env 的安全處理與命名清理
+
+

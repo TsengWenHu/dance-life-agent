@@ -1,0 +1,6 @@
+flowchart TD
+    A[Streamlit app] --> B[LangGraph router]
+    B -->|dance_analysis| C[Dance agent mock]
+    B -->|room_booking| D[Booking agent mock]
+    C --> E[Response]
+    D --> E[Response]
