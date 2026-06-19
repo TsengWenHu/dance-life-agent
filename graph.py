@@ -12,6 +12,7 @@ class GraphState(TypedDict):
     user_input: str
     intent: str
     response: str
+    video_path: str | None  # 可選：上傳的影片檔案路徑
 
 
 def router_node(state: GraphState) -> GraphState:
@@ -67,7 +68,10 @@ def route_after_router(state: GraphState) -> str:
 
 
 def dance_node(state: GraphState) -> GraphState:
-    return {"response": dance_agent.analyze_dance(state["user_input"])}
+    return {"response": dance_agent.analyze_dance(
+        state["user_input"], 
+        video_path=state.get("video_path")
+    )}
 
 
 def booking_node(state: GraphState) -> GraphState:
@@ -89,6 +93,19 @@ graph.add_conditional_edges(
 compiled_graph = graph.compile()
 
 
-def run_graph(user_input: str) -> str:
-    state = compiled_graph.invoke({"user_input": user_input})
+def run_graph(user_input: str, video_path: str | None = None) -> str:
+    """
+    執行 LangGraph。
+    
+    Args:
+        user_input: 使用者輸入的問題
+        video_path: 可選，上傳影片的檔案路徑（若無則為 None）
+    
+    Returns:
+        agent 回應的文字
+    """
+    state = compiled_graph.invoke({
+        "user_input": user_input,
+        "video_path": video_path
+    })
     return state.get("response", "無回應")

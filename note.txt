@@ -29,3 +29,9 @@ UI/Streamlit 的 booking flow 完整化
 .env 的安全處理與命名清理
 
 
+run:
+cd /Users/rubyhu/Desktop/dance-life-agent
+source .venv/bin/activate
+pip install -r requirements.txt
+
+streamlit run app.py
