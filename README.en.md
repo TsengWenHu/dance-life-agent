@@ -170,8 +170,7 @@ Expected:
 |----------|----------|-------------|
 | OPENAI_API_KEY | Yes | OpenAI API key |
 | OPENAI_MODEL | Yes | OpenAI model name (for example, gpt-5.4-mini) |
-| PE_EMAIL | No | Practice Everything account email |
-| PE_PASSWORD | No | Practice Everything account password |
+
 
 ## Git Submission
 
