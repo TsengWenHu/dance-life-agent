@@ -167,8 +167,6 @@ python3 -m unittest -q tests/test_i18n_booking_language_unittest.py
 |------|------|------|
 | `OPENAI_API_KEY` | ✅ | OpenAI API 金鑰 |
 | `OPENAI_MODEL` | ✅ | 使用的 OpenAI 模型（如 `gpt-5.4-mini`） |
-| `PE_EMAIL` | ❌ | Practice Everything 帳號 email（用於查詢） |
-| `PE_PASSWORD` | ❌ | Practice Everything 帳號密碼（用於查詢） |
 
 ## 使用 Git 提交
 
