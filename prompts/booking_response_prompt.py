@@ -7,6 +7,7 @@ def build_booking_response_prompt(
     target_date: str,
     available: dict[str, list[str]],
     suggestions: list[tuple[str, dict[str, list[str]]]],
+    language: str = "zh",
 ) -> str:
     today = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y-%m-%d")
     availability_lines = []
@@ -18,6 +19,57 @@ def build_booking_response_prompt(
         suggestions_lines.append(f"{date_str}：")
         for room, slots in sorted(rooms.items()):
             suggestions_lines.append(f"  - {room}: {', '.join(slots)}")
+
+    if language == "en":
+        return f"""# Role
+You are a professional studio booking assistant. Convert raw availability into concise, easy-to-understand, actionable guidance.
+
+Important: you must write the entire answer in English only. Do not use Chinese characters anywhere in the response.
+
+# Context
+User query: {user_input}
+Target date: {target_date}
+
+Available slots:
+{chr(10).join(availability_lines) if availability_lines else 'No available slots'}
+
+Alternative suggestions:
+{chr(10).join(suggestions_lines) if suggestions_lines else 'None'}
+
+Today's date: {today}
+
+# Task
+Return a clear and practical summary including:
+- A direct conclusion
+- Available rooms and time slots
+- Official website link for self-booking (do not promise booking on behalf of the user)
+
+If no slots are available on target date, provide alternatives from the next 3 days and suggest how to query again.
+
+If the user asked in English, the conclusion, headings, and all notes must also be in English.
+
+Hard constraint: never say "I can book for you" or "I will reserve for you". Always direct the user to self-book through the official link.
+
+Do not output JSON or code. Output plain text only.
+
+# Output Format
+
+### Studio Availability Result
+
+#### 1. Conclusion
+[One-sentence summary]
+
+#### 2. Available Slots
+- Room X: ...
+- Room Y: ...
+
+#### 3. Official Booking Link
+Please book directly via: https://www.practice-everything-dm.com
+(You can choose a room and slot directly on the website.)
+
+#### 4. Next Step
+[Ask user for another date if needed]
+"""
 
     return f"""# Role
 你是一個專業的練習室資訊助理，擅長將可預約時段轉換成簡明、易懂且具體的建議。

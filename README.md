@@ -1,6 +1,38 @@
 # Dance Practice Agent
 
+English version: [README.en.md](README.en.md)
+
 這是一個用於展示多 agent 與 LangGraph 路由的 Streamlit Demo 專案。使用 OpenAI 官方 API 與 LangGraph 實現意圖路由，提供舞蹈分析與練習室預約查詢功能。
+
+## Demo
+
+- Live Demo: （可放雲端連結）
+- Demo Video: （可放 YouTube / Loom 連結）
+- 建議 60-90 秒展示順序：
+   1. 中英文 UI 切換
+   2. 英文輸入英文回覆 / 中文輸入中文回覆
+   3. Booking 查詢（tomorrow / next Monday / YYYY-MM-DD）
+
+## Key Outcomes
+
+- 打造可展示的 AI 助理作品：LangGraph 路由 + Streamlit 互動介面
+- 多語系體驗完成：UI 可切換，回覆語言依輸入語言自動切換
+- Booking 體驗可用：支援中英日期語句與可預約時段整理
+- 保留工程可維護性：測試覆蓋語言偵測與日期解析
+
+## Tech Decisions
+
+- 為何用 LangGraph：將「意圖分類」與「任務執行」拆成明確節點，路由清楚、擴展容易
+- 為何用 Streamlit：快速交付可互動 Demo，降低面試官體驗門檻
+- 為何做 i18n.py：集中管理 UI 文案與語言偵測，避免字串分散在多檔案
+- 為何加語言保險邏輯：降低模型偶發語言偏移，確保輸出與輸入語言一致
+
+## Portfolio Highlights
+
+- Streamlit 雙語介面（中文 / English）切換
+- 使用者輸入語言偵測：輸入中文回中文、輸入英文回英文
+- LangGraph 意圖路由：`dance_analysis` / `room_booking`
+- 練習室可用時段查詢（含中英日期語句解析）
 
 ## 核心功能
 
@@ -39,7 +71,7 @@ cp .env.example .env
 
 編輯 `.env` 並填入：
 - `OPENAI_API_KEY=your_openai_key`
-- `OPENAI_MODEL=gpt-4o-mini` (或其他 OpenAI 模型)
+- `OPENAI_MODEL=gpt-5.4-mini` (或其他 OpenAI Responses 支援模型)
 - `PE_EMAIL=your_pe_email` (可選，用於練習室查詢)
 - `PE_PASSWORD=your_pe_password` (可選，用於練習室查詢)
 
@@ -63,12 +95,20 @@ streamlit run app.py
 - 「明天有哪些練習室空著？」
 - 「2026-06-20 下午有沒有 Z01 房間可以預約？」
 - 「後天上午的可用時段」
+- "Any practice room available tomorrow afternoon?"
+- "Can I reserve a studio on June 20?"
+
+### 多語系行為
+- UI 語言由右上角切換（中文 / English）
+- LLM 回覆語言依照使用者輸入語言判斷，不強制跟隨 UI 語言
+- 英文日期語句支援：`tomorrow`、`day after tomorrow`、`next Monday`、`June 20`、`YYYY-MM-DD`
 
 ## 專案結構
 
 ```
 dance-life-agent/
 ├── app.py                          # Streamlit 入口，包含檔案上傳功能
+├── i18n.py                         # UI 文案與輸入語言偵測
 ├── graph.py                        # LangGraph 路由邏輯 (StateGraph)
 ├── agents/
 │   ├── dance_agent.py             # 舞蹈分析 agent（支援有無影片分流）
@@ -83,6 +123,7 @@ dance-life-agent/
 │   └── dance_teacher_compare/     # 舞蹈分析相關工具
 ├── tests/
 │   └── test_dance_with_without_video.py  # 舞蹈分析測試
+│   └── test_i18n_booking_language_unittest.py  # 多語與英文日期解析測試
 ├── requirements.txt               # Python 依賴
 ├── .env.example                  # 環境變數範本
 └── README.md                     # 本檔案
@@ -107,8 +148,13 @@ dance-life-agent/
 執行舞蹈分析測試（無影片 vs 有影片）：
 
 ```bash
-cd tests
-python test_dance_with_without_video.py
+python3 tests/test_dance_with_without_video.py
+```
+
+執行多語與日期解析測試：
+
+```bash
+python3 -m unittest -q tests/test_i18n_booking_language_unittest.py
 ```
 
 預期結果：
@@ -120,7 +166,7 @@ python test_dance_with_without_video.py
 | 變數 | 必需 | 說明 |
 |------|------|------|
 | `OPENAI_API_KEY` | ✅ | OpenAI API 金鑰 |
-| `OPENAI_MODEL` | ✅ | 使用的 OpenAI 模型（如 `gpt-4o-mini`） |
+| `OPENAI_MODEL` | ✅ | 使用的 OpenAI 模型（如 `gpt-5.4-mini`） |
 | `PE_EMAIL` | ❌ | Practice Everything 帳號 email（用於查詢） |
 | `PE_PASSWORD` | ❌ | Practice Everything 帳號密碼（用於查詢） |
 
@@ -162,4 +208,4 @@ git check-ignore -v .env
 
 ## 授權
 
-MIT License（可根據需要調整）
+MIT License。詳見 [LICENSE](LICENSE)。

@@ -8,3 +8,5 @@ __pycache__/
 *.mkv
 *.avi
 *.flv
+.claude/
+*.local.json

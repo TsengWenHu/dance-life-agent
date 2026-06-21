@@ -1,4 +1,23 @@
-def build_router_prompt(user_input: str) -> str:
+def build_router_prompt(user_input: str, language: str = "zh") -> str:
+    if language == "en":
+        return f"""
+You are an intent classifier for a dance practice assistant.
+
+User input:
+{user_input}
+
+Return exactly one label:
+- dance_analysis
+- room_booking
+
+Rules:
+- If the user asks about studio availability, room booking, reservation process, room schedule, or open slots, return room_booking.
+- If the user asks about dance technique, move corrections, posture, choreography ideas, or practice methods, return dance_analysis.
+- Keywords like "practice room", "studio", "booking", "reservation", "availability", "slot" should map to room_booking.
+- Even if words like "dance" appear, if the context is room or booking related, return room_booking.
+- Return label only, no explanation.
+"""
+
     return f"""
 你是一個舞蹈練習助理的意圖分類器。
 

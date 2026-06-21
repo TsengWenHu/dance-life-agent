@@ -2,14 +2,17 @@ import re
 import os
 from datetime import datetime, timedelta
 
-from openai import OpenAI
-from skills.booking.booking_skill import check_availability
+try:
+    from openai import OpenAI
+except Exception:
+    OpenAI = None
 from prompts.booking_response_prompt import build_booking_response_prompt
 
 
 def _parse_date(user_input: str) -> str | None:
-    """Extract a target date from user input, supporting YYYY-MM-DD and common Chinese relative terms."""
+    """Extract a target date from user input, supporting zh/en relative and explicit date formats."""
     user_input = user_input.strip()
+    normalized_input = user_input.lower().strip()
 
     # ISO date patterns like 2026-06-14, 2026/06/14, 2026.06.14
     m = re.search(r"(\d{4})[./-](\d{1,2})[./-](\d{1,2})", user_input)
@@ -31,6 +34,64 @@ def _parse_date(user_input: str) -> str | None:
         if key in user_input:
             return (today + timedelta(days=offset)).strftime("%Y-%m-%d")
 
+    # English relative terms
+    if "day after tomorrow" in normalized_input:
+        return (today + timedelta(days=2)).strftime("%Y-%m-%d")
+    if "tomorrow" in normalized_input:
+        return (today + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # next Monday / next Tuesday / ...
+    next_weekday_match = re.search(
+        r"\bnext\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+        normalized_input,
+    )
+    if next_weekday_match:
+        weekday_map = {
+            "monday": 0,
+            "tuesday": 1,
+            "wednesday": 2,
+            "thursday": 3,
+            "friday": 4,
+            "saturday": 5,
+            "sunday": 6,
+        }
+        target_weekday = weekday_map[next_weekday_match.group(1)]
+        days_ahead = (target_weekday - today.weekday() + 7) % 7
+        if days_ahead == 0:
+            days_ahead = 7
+        return (today + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+
+    # Month name + day, like "June 20"
+    month_day_match = re.search(
+        r"\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})\b",
+        normalized_input,
+    )
+    if month_day_match:
+        month_map = {
+            "january": 1,
+            "february": 2,
+            "march": 3,
+            "april": 4,
+            "may": 5,
+            "june": 6,
+            "july": 7,
+            "august": 8,
+            "september": 9,
+            "october": 10,
+            "november": 11,
+            "december": 12,
+        }
+        month = month_map[month_day_match.group(1)]
+        day = int(month_day_match.group(2))
+        year = today.year
+        try:
+            candidate = datetime(year, month, day).date()
+            if candidate < today:
+                candidate = datetime(year + 1, month, day).date()
+            return candidate.strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
     # fallback: look for 'X 日' or 'X 號' in the same month if no explicit date format
     day_match = re.search(r"(\d{1,2})\s*[日號]", user_input)
     if day_match:
@@ -46,25 +107,30 @@ def _parse_date(user_input: str) -> str | None:
     return None
 
 
-def _format_availability(date: str, results: dict[str, list[str]]) -> str:
-    lines = [f"{date} 可預約時段："]
+def _format_availability(date: str, results: dict[str, list[str]], language: str = "zh") -> str:
+    lines = [f"{date} Available slots:" if language == "en" else f"{date} 可預約時段："]
     for room, slots in sorted(results.items()):
         if slots:
             lines.append(f"- {room}: {', '.join(slots)}")
     return "\n".join(lines)
 
 
-def mock_response(user_input: str) -> str:
+def mock_response(user_input: str, input_language: str = "zh") -> str:
+    from skills.booking.booking_skill import check_availability
+
     target_date = _parse_date(user_input)
     if target_date is None:
-        return (
-            "請提供欲查詢的日期，格式例如 2026-06-14，或使用「明天」「後天」等詞。"
-        )
+        if input_language == "en":
+            return (
+                "Please provide a target date, for example 2026-06-14, or terms like "
+                "'tomorrow', 'day after tomorrow', or 'next Monday'."
+            )
+        return "請提供欲查詢的日期，格式例如 2026-06-14，或使用「明天」「後天」等詞。"
 
     try:
         today = datetime.now().date()
         if datetime.fromisoformat(target_date).date() < today:
-            return "請提供今天或之後的日期，才能查詢可預約時段。"
+            return "Please provide today or a future date for booking search." if input_language == "en" else "請提供今天或之後的日期，才能查詢可預約時段。"
 
         results = check_availability(target_date)
         available = {room: slots for room, slots in results.items() if slots}
@@ -78,6 +144,11 @@ def mock_response(user_input: str) -> str:
                 suggestions.append((next_date, next_available))
 
         if not available and not suggestions:
+            if input_language == "en":
+                return (
+                    f"No available slots were found on {target_date}, and none were found in the next 3 days."
+                    "\nPlease try another date later."
+                )
             return (
                 f"你詢問的日期 {target_date} 目前沒有可用時段，接下來 3 天內也都沒有發現可預約時段。"
                 "\n請稍後再查或改用其他日期。"
@@ -86,10 +157,16 @@ def mock_response(user_input: str) -> str:
         # 使用 LLM 產生更友善、易讀的結果回應
         openai_api_key = os.environ.get("OPENAI_API_KEY")
         openai_model = os.environ.get("OPENAI_MODEL", "gpt-5.4-mini")
-        if openai_api_key:
+        if openai_api_key and OpenAI is not None:
             try:
                 client = OpenAI(api_key=openai_api_key)
-                prompt = build_booking_response_prompt(user_input, target_date, available, suggestions)
+                prompt = build_booking_response_prompt(
+                    user_input,
+                    target_date,
+                    available,
+                    suggestions,
+                    language=input_language,
+                )
                 resp = client.responses.create(
                     model=openai_model,
                     input=[{"role": "user", "content": [{"type": "input_text", "text": prompt}]}],
@@ -112,30 +189,60 @@ def mock_response(user_input: str) -> str:
                         if t:
                             texts.append(t)
                 if texts:
-                    return "\n\n".join(texts)
+                    response_text = "\n\n".join(texts)
+                    if input_language == "en" and any("\u4e00" <= ch <= "\u9fff" for ch in response_text):
+                        return (
+                            f"[Studio Availability]\nYour requested date {target_date} has available slots:\n"
+                            + _format_availability(target_date, available, language="en")
+                            + "\n\nOfficial booking website: https://www.practice-everything-dm.com\n"
+                            + "Please choose a room and time slot directly on the website."
+                        )
+                    return response_text
             except Exception:
                 pass
 
         # fallback to plain formatted response
         if available:
+            if input_language == "en":
+                text = [
+                    f"[Studio Availability]\nYour requested date {target_date} has available slots:",
+                    _format_availability(target_date, available, language=input_language),
+                    "\nOfficial booking website: https://www.practice-everything-dm.com\nPlease choose a room and time slot directly on the website.",
+                ]
+                if suggestions:
+                    text.append("\nAlternative options in the next 3 days:")
+                    for date_str, slots in suggestions:
+                        text.append(_format_availability(date_str, slots, language=input_language))
+                return "\n".join(text)
+
             text = [
                 f"【練習室查詢結果】\n你詢問的日期 {target_date} 有可預約時段：",
-                _format_availability(target_date, available),
+                _format_availability(target_date, available, language=input_language),
                 "\n📍 官網預約連結：https://www.practice-everything-dm.com\n你可以直接在官網選擇房間與時段進行預約。",
             ]
             if suggestions:
                 text.append("\n以下是接下來 3 天內的可用時段建議：")
                 for date_str, slots in suggestions:
-                    text.append(_format_availability(date_str, slots))
+                    text.append(_format_availability(date_str, slots, language=input_language))
             return "\n".join(text)
+
+        if input_language == "en":
+            return (
+                f"No available slots were found on {target_date}.\n"
+                "Here are available options in the next 3 days:\n"
+                + "\n\n".join(_format_availability(date_str, slots, language=input_language) for date_str, slots in suggestions)
+                + "\n\nOfficial booking website: https://www.practice-everything-dm.com"
+            )
 
         return (
             f"你詢問的日期 {target_date} 目前沒有可預約時段。\n"
             "以下是接下來 3 天內的可用時段建議：\n"
-            + "\n\n".join(_format_availability(date_str, slots) for date_str, slots in suggestions)
+            + "\n\n".join(_format_availability(date_str, slots, language=input_language) for date_str, slots in suggestions)
             + "\n\n📍 官網預約連結：https://www.practice-everything-dm.com"
         )
     except Exception as exc:
+        if input_language == "en":
+            return f"An error occurred while checking availability: {exc}\nPlease try again later."
         return f"查詢時發生錯誤：{exc}\n請稍後再試。"
 
 
@@ -145,6 +252,8 @@ def get_availability(target_date: str, duration_hours: int = 1, location: str = 
 
     回傳： (available: dict[room -> list[str]], suggestions: list[(date, dict)])
     """
+    from skills.booking.booking_skill import check_availability
+
     try:
         results = check_availability(target_date, duration_hours=duration_hours, location=location)
         available = {room: slots for room, slots in results.items() if slots}

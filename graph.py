@@ -13,10 +13,14 @@ class GraphState(TypedDict):
     intent: str
     response: str
     video_path: str | None  # 可選：上傳的影片檔案路徑
+    input_language: str
 
 
 def router_node(state: GraphState) -> GraphState:
-    prompt_text = build_router_prompt(state["user_input"])
+    prompt_text = build_router_prompt(
+        state["user_input"],
+        language=state.get("input_language", "zh"),
+    )
 
     openai_api_key = os.environ.get("OPENAI_API_KEY")
     openai_model = os.environ.get("OPENAI_MODEL", "gpt-5.4-mini")
@@ -56,9 +60,11 @@ def router_node(state: GraphState) -> GraphState:
                 pass
 
         except Exception:
-            intent = "room_booking" if "練習室" in state["user_input"] or "房間" in state["user_input"] else "dance_analysis"
+            user_input = state["user_input"].lower()
+            intent = "room_booking" if any(keyword in user_input for keyword in ["練習室", "練舞室", "房間", "預約", "場地", "practice room", "studio", "booking", "reservation"]) else "dance_analysis"
     else:
-        intent = "room_booking" if any(keyword in state["user_input"] for keyword in ["練習室", "練舞室", "房間", "預約", "可預約", "場地"]) else "dance_analysis"
+        user_input = state["user_input"].lower()
+        intent = "room_booking" if any(keyword in user_input for keyword in ["練習室", "練舞室", "房間", "預約", "可預約", "場地", "practice room", "studio", "booking", "reservation"]) else "dance_analysis"
 
     return {"intent": intent}
 
@@ -69,13 +75,19 @@ def route_after_router(state: GraphState) -> str:
 
 def dance_node(state: GraphState) -> GraphState:
     return {"response": dance_agent.analyze_dance(
-        state["user_input"], 
-        video_path=state.get("video_path")
+        state["user_input"],
+        video_path=state.get("video_path"),
+        input_language=state.get("input_language", "zh"),
     )}
 
 
 def booking_node(state: GraphState) -> GraphState:
-    return {"response": booking_agent.mock_response(state["user_input"])}
+    return {
+        "response": booking_agent.mock_response(
+            state["user_input"],
+            input_language=state.get("input_language", "zh"),
+        )
+    }
 
 
 graph = StateGraph(state_schema=GraphState)
@@ -93,7 +105,7 @@ graph.add_conditional_edges(
 compiled_graph = graph.compile()
 
 
-def run_graph(user_input: str, video_path: str | None = None) -> str:
+def run_graph(user_input: str, video_path: str | None = None, input_language: str = "zh") -> str:
     """
     執行 LangGraph。
     
@@ -106,6 +118,7 @@ def run_graph(user_input: str, video_path: str | None = None) -> str:
     """
     state = compiled_graph.invoke({
         "user_input": user_input,
-        "video_path": video_path
+        "video_path": video_path,
+        "input_language": input_language,
     })
     return state.get("response", "無回應")

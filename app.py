@@ -1,11 +1,15 @@
 import streamlit as st
 from dotenv import load_dotenv
-import os
 import tempfile
 from typing import List, Dict
 
 from agents import booking_agent
-from skills.booking.booking_skill import check_availability
+from i18n import (
+    t,
+    get_booking_keywords,
+    detect_input_language,
+    ui_language_options,
+)
 
 # load local env file if present (.env)
 load_dotenv(".env")
@@ -13,7 +17,16 @@ load_dotenv(".env")
 from graph import run_graph
 
 
-st.set_page_config(page_title="舞蹈練習助理", page_icon="💃", layout="wide")
+if "ui_language" not in st.session_state:
+    st.session_state["ui_language"] = "zh"
+
+# Streamlit 會先更新 widget key，再跑整支 script；先吃 selector 值可讓標題即時切換語言
+effective_ui_language = st.session_state.get("ui_language_selector", st.session_state["ui_language"])
+st.session_state["ui_language"] = effective_ui_language
+
+st.set_page_config(page_title=t(st.session_state["ui_language"], "page_title"), page_icon="💃", layout="wide")
+
+header_title = t(st.session_state["ui_language"], "header_title")
 
 st.markdown("""
 <style>
@@ -133,31 +146,44 @@ html, body, [class*="css"] {
 </style>
 
 <div class="neon-header">
-    <p class="neon-title">💃 你的跳舞好夥伴 💃</p>
+    <p class="neon-title">__HEADER_TITLE__</p>
     <hr class="neon-divider">
 </div>
-""", unsafe_allow_html=True)
+""".replace("__HEADER_TITLE__", header_title), unsafe_allow_html=True)
 
 if "history" not in st.session_state:
     st.session_state["history"] = []
 if "uploaded_video_path" not in st.session_state:
     st.session_state["uploaded_video_path"] = None
 
+lang_col_l, lang_col_r = st.columns([0.82, 0.18])
+with lang_col_r:
+    selected_language = st.selectbox(
+        t(st.session_state["ui_language"], "language_label"),
+        options=ui_language_options(),
+        index=ui_language_options().index(st.session_state["ui_language"]),
+        format_func=lambda code: t(st.session_state["ui_language"], f"language_option_{code}"),
+        key="ui_language_selector",
+        label_visibility="collapsed",
+    )
+    if selected_language != st.session_state["ui_language"]:
+        st.session_state["ui_language"] = selected_language
+        st.rerun()
+
+ui_lang = st.session_state["ui_language"]
+
 with st.sidebar:
-    st.header("使用說明")
-    st.markdown("### 快速功能介紹")
-    st.markdown("- 舞動疑難雜症？問我！🎤")
-    st.markdown("- 上傳影片，提供建議＋給練習計畫🎯")
-    st.markdown("- 查練舞室空檔，快速找到場地🕒")
-    st.markdown("")
-    st.markdown("- 輸入範例：練習室查詢「明天下午有哪些練習室空著？」")
+    st.header(t(ui_lang, "sidebar_intro_title"))
+    st.markdown(t(ui_lang, "sidebar_b1"))
+    st.markdown(t(ui_lang, "sidebar_b2"))
+    st.markdown(t(ui_lang, "sidebar_b3"))
     st.markdown("")
     
     # 檔案上傳區
     uploaded_file = st.file_uploader(
-        "上傳練習影片",
+        t(ui_lang, "upload_label"),
         type=["mp4", "mov", "mkv", "avi", "flv"],
-        help="支援 mp4, mov, mkv, avi, flv"
+        help=t(ui_lang, "upload_help")
     )
     
     if uploaded_file is not None:
@@ -165,32 +191,33 @@ with st.sidebar:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
             tmp_file.write(uploaded_file.getbuffer())
             st.session_state["uploaded_video_path"] = tmp_file.name
-        st.success(f"✅ 已上傳: {uploaded_file.name}")
-        st.caption(f"檔案大小: {uploaded_file.size / (1024*1024):.2f} MB")
+        st.success(t(ui_lang, "upload_success", filename=uploaded_file.name))
+        st.caption(t(ui_lang, "upload_size", size_mb=uploaded_file.size / (1024 * 1024)))
     else:
         st.session_state["uploaded_video_path"] = None
-        st.info("📹 可以上傳影片給我分析喔～")
+        st.info(t(ui_lang, "upload_hint"))
 
 # 主聊天區
-user_input = st.chat_input("請輸入問題...")
+user_input = st.chat_input(t(ui_lang, "chat_placeholder"))
 if user_input:
     # 立即顯示使用者訊息（避免等待 LLM 回應才看到）
     st.session_state["history"].append({"role": "user", "content": user_input})
     st.chat_message("user").write(user_input)
 
     # 若是練舞室查詢，嘗試顯示分段時段表格（早上/下午/晚上）
-    booking_keywords = ["練習室", "練舞室", "房間", "預約", "可預約", "場地", "空檔"]
+    booking_keywords = get_booking_keywords()
     booking_table_data = None
-    if any(k in user_input for k in booking_keywords):
+    lowered_user_input = user_input.lower()
+    if any(k in lowered_user_input for k in booking_keywords):
         try:
-            with st.status("🔍 正在查詢練舞室資料...", expanded=True) as status_container:
+            with st.status(t(ui_lang, "booking_status_title"), expanded=True) as status_container:
                 target_date = booking_agent._parse_date(user_input)
                 if target_date:
-                    st.write(f"📅 查詢日期: {target_date}")
-                    st.write("🔄 正在爬取練舞室資訊...")
+                    st.write(t(ui_lang, "booking_query_date", date=target_date))
+                    st.write(t(ui_lang, "booking_fetching"))
                     
                     available, suggestions = booking_agent.get_availability(target_date)
-                    st.write(f"✅ 找到 {len(available)} 個房間")
+                    st.write(t(ui_lang, "booking_found_rooms", count=len(available)))
 
                     # 將可用時段合併連續區間，再依照早/中/晚分類顯示
                     def categorize_merged(merged_ranges: List[str]) -> Dict[str, str]:
@@ -210,33 +237,43 @@ if user_input:
                             else:
                                 night.append(r)
                         return {
-                            "早上": ", ".join(morning) if morning else "-",
-                            "下午": ", ".join(afternoon) if afternoon else "-",
-                            "晚上": ", ".join(night) if night else "-",
+                            t(ui_lang, "table_morning"): ", ".join(morning) if morning else "-",
+                            t(ui_lang, "table_afternoon"): ", ".join(afternoon) if afternoon else "-",
+                            t(ui_lang, "table_evening"): ", ".join(night) if night else "-",
                         }
 
                     table_rows = []
                     for room, slots in sorted(available.items()):
                         merged = booking_agent.merge_contiguous_slots(slots)
                         cats = categorize_merged(merged)
-                        row = {"練舞室": room, "早上": cats["早上"], "下午": cats["下午"], "晚上": cats["晚上"]}
+                        row = {
+                            t(ui_lang, "table_room"): room,
+                            t(ui_lang, "table_morning"): cats[t(ui_lang, "table_morning")],
+                            t(ui_lang, "table_afternoon"): cats[t(ui_lang, "table_afternoon")],
+                            t(ui_lang, "table_evening"): cats[t(ui_lang, "table_evening")],
+                        }
                         table_rows.append(row)
 
                     if table_rows:
-                        st.write("⏱️ 格式化時段...")
-                        st.markdown("**可預約時段（已合併區間）**")
+                        st.write(t(ui_lang, "booking_formatting"))
+                        st.markdown(t(ui_lang, "booking_table_title"))
                         st.table(table_rows)
                     
-                    status_container.update(label="✨ 查詢完成", state="complete")
+                    status_container.update(label=t(ui_lang, "booking_done"), state="complete")
         except Exception as e:
-            st.error(f"查詢失敗: {e}")
+            st.error(t(ui_lang, "booking_failed", error=e))
 
     # 取得目前的影片路徑（若有），再呼叫後端圖譜進行完整回應
     current_video_path = st.session_state.get("uploaded_video_path")
-    with st.status("🤔 正在分析您的問題...", expanded=False) as status:
-        st.write("⚡ 判斷意圖中...")
-        response = run_graph(user_input, video_path=current_video_path)
-        status.update(label="✨ 回應完成", state="complete")
+    input_language = detect_input_language(user_input, fallback=ui_lang)
+    with st.status(t(ui_lang, "analyzing_title"), expanded=False) as status:
+        st.write(t(ui_lang, "analyzing_intent"))
+        response = run_graph(
+            user_input,
+            video_path=current_video_path,
+            input_language=input_language,
+        )
+        status.update(label=t(ui_lang, "analyzing_done"), state="complete")
 
     # 若有表格資料，也保存到歷史（用特殊標記識別）
     st.session_state["history"].append({"role": "assistant", "content": response})
@@ -250,6 +287,6 @@ for message in st.session_state["history"]:
         response_text = message["content"]
         response_text = response_text.replace(
             "https://www.practice-everything-dm.com",
-            "[官網預約連結](https://www.practice-everything-dm.com)"
+            f"[{t(ui_lang, 'official_link_text')}](https://www.practice-everything-dm.com)"
         )
         st.chat_message("assistant").write(response_text, unsafe_allow_html=False)
